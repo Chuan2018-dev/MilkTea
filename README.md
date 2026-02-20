@@ -26,6 +26,12 @@ A complete web-based Milk Tea Ordering System built with Laravel 11, PHP, MySQL,
 - Print order receipts
 - View sales reports and analytics
 
+### Android APK App
+- Native Android project included at `android-app/`
+- Connects to your online Laravel site URL
+- Supports login sessions, pull-to-refresh, and form file uploads
+- Can be built to APK using Android Studio
+
 ## System Requirements
 
 - PHP >= 8.2
@@ -114,6 +120,33 @@ php artisan serve
 ```
 
 Visit `http://localhost:8000` in your browser.
+
+## Android APK Build
+
+The Android app project is in:
+
+```bash
+milk-tea-shop/android-app
+```
+
+### Quick Steps
+
+1. Open `android-app/app/build.gradle`
+2. Set your deployed backend URL in:
+   ```groovy
+   buildConfigField "String", "BASE_URL", "\"https://your-domain.com\""
+   ```
+3. Open `android-app` in Android Studio
+4. Build APK:
+   - `Build` > `Build Bundle(s) / APK(s)` > `Build APK(s)`
+5. Output APK:
+   - `android-app/app/build/outputs/apk/debug/app-debug.apk`
+
+For full details, see:
+
+```bash
+android-app/README.md
+```
 
 ## Default Login Credentials
 

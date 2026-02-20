@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Milk Tea Shop</string>
+    <string name="offline_title">No internet connection</string>
+    <string name="offline_message">Connect to the internet and tap retry to continue.</string>
+    <string name="retry">Retry</string>
+    <string name="file_chooser_error">Unable to open file picker.</string>
+</resources>
