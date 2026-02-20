@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-labelledby="title desc">
+  <title id="title">Default add-on image</title>
+  <desc id="desc">A stylized plus icon used as a fallback image for add-ons.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f7fbff"/>
+      <stop offset="100%" stop-color="#e7f1ff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <circle cx="200" cy="200" r="150" fill="#ffffff" opacity="0.92"/>
+  <rect x="185" y="120" width="30" height="160" rx="15" fill="#0d6efd"/>
+  <rect x="120" y="185" width="160" height="30" rx="15" fill="#0d6efd"/>
+
+  <text x="200" y="335" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#6c7a89">
+    Add-on
+  </text>
+</svg>
