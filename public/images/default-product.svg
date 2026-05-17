@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">Default milk tea product image</title>
+  <desc id="desc">Illustration of a milk tea cup with tapioca pearls.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7efe5"/>
+      <stop offset="1" stop-color="#e1c4a4"/>
+    </linearGradient>
+    <linearGradient id="tea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d8a96b"/>
+      <stop offset="1" stop-color="#9b6538"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="480" fill="url(#bg)"/>
+  <circle cx="500" cy="96" r="72" fill="#f6d48d" opacity=".5"/>
+  <path d="M206 132h228l-34 250c-4 31-31 54-63 54h-34c-32 0-59-23-63-54l-34-250z" fill="#fff7ee" stroke="#6b4423" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M224 192h192l-26 188c-3 20-20 35-41 35h-58c-21 0-38-15-41-35l-26-188z" fill="url(#tea)"/>
+  <path d="M218 168h204" stroke="#6b4423" stroke-width="14" stroke-linecap="round"/>
+  <path d="M292 117h108" stroke="#6b4423" stroke-width="12" stroke-linecap="round"/>
+  <path d="M347 117l39-72" stroke="#6b4423" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="287" cy="360" r="13" fill="#3a2417"/>
+  <circle cx="326" cy="384" r="13" fill="#3a2417"/>
+  <circle cx="366" cy="350" r="13" fill="#3a2417"/>
+  <circle cx="318" cy="330" r="13" fill="#3a2417"/>
+  <text x="320" y="82" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#6b4423">Milk Tea</text>
+</svg>
