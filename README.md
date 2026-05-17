@@ -132,6 +132,8 @@ routes/web.php                  Web routes
 
 ## Deployment Notes
 
+For InfinityFree/free shared hosting, use [DEPLOY_INFINITYFREE.md](DEPLOY_INFINITYFREE.md).
+
 - Set `APP_ENV=production` and `APP_DEBUG=false` on the hosting server.
 - Point the web root to the Laravel `public` directory.
 - Configure the production MySQL credentials in `.env`.
