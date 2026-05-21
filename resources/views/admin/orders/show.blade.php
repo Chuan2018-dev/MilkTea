@@ -185,6 +185,12 @@
                                 <span>{{ ucfirst($order->payment_method) }}</span>
                             </div>
                             <div class="mb-3">
+                                <small class="text-muted d-block">Payment Status</small>
+                                <span class="badge badge-{{ $order->payment_status }}">
+                                    {{ ucfirst($order->payment_status) }}
+                                </span>
+                            </div>
+                            <div class="mb-3">
                                 <small class="text-muted d-block">Pickup Method</small>
                                 <span>{{ ucfirst(str_replace('_', ' ', $order->pickup_method)) }}</span>
                             </div>

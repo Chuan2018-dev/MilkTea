@@ -118,6 +118,7 @@
                                     <th>Date</th>
                                     <th>Total</th>
                                     <th>Status</th>
+                                    <th>Payment</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
@@ -134,6 +135,11 @@
                                             </span>
                                         </td>
                                         <td>
+                                            <span class="badge badge-{{ $order->payment_status }}">
+                                                {{ ucfirst($order->payment_status) }}
+                                            </span>
+                                        </td>
+                                        <td>
                                             <a href="{{ route('admin.orders.show', $order) }}" 
                                                class="btn btn-sm btn-outline-primary">
                                                 View
@@ -142,7 +148,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="6" class="text-center py-4">No orders yet</td>
+                                        <td colspan="7" class="text-center py-4">No orders yet</td>
                                     </tr>
                                 @endforelse
                             </tbody>

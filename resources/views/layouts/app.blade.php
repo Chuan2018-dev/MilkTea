@@ -61,6 +61,9 @@
         .badge-ready { background-color: #28a745; color: #fff; }
         .badge-completed { background-color: #6c757d; color: #fff; }
         .badge-cancelled { background-color: #dc3545; color: #fff; }
+        .badge-paid { background-color: #28a745; color: #fff; }
+        .badge-failed { background-color: #dc3545; color: #fff; }
+        .badge-refunded { background-color: #6c757d; color: #fff; }
         
         .cart-badge {
             position: relative;

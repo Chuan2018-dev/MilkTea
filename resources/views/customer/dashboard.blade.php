@@ -76,6 +76,7 @@
                                         <th>Date</th>
                                         <th>Total</th>
                                         <th>Status</th>
+                                        <th>Payment</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -88,6 +89,11 @@
                                             <td>
                                                 <span class="badge badge-{{ $order->status }}">
                                                     {{ ucfirst($order->status) }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-{{ $order->payment_status }}">
+                                                    {{ ucfirst($order->payment_status) }}
                                                 </span>
                                             </td>
                                             <td>
