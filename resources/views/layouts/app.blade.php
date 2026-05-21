@@ -213,6 +213,25 @@
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.querySelectorAll('[data-password-toggle]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const input = document.querySelector(button.dataset.passwordToggle);
+                const icon = button.querySelector('i');
+
+                if (!input || !icon) {
+                    return;
+                }
+
+                const isHidden = input.type === 'password';
+                input.type = isHidden ? 'text' : 'password';
+                icon.classList.toggle('bi-eye', isHidden);
+                icon.classList.toggle('bi-eye-slash', !isHidden);
+                button.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+                button.setAttribute('title', isHidden ? 'Hide password' : 'Show password');
+            });
+        });
+    </script>
     
     @stack('scripts')
 </body>

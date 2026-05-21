@@ -60,25 +60,43 @@
 
                         <div class="mb-3">
                             <label for="password" class="form-label">Password</label>
-                            <input type="password" 
-                                   class="form-control @error('password') is-invalid @enderror" 
-                                   id="password" 
-                                   name="password" 
-                                   required 
-                                   autocomplete="new-password">
-                            @error('password')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            <div class="input-group has-validation">
+                                <input type="password" 
+                                       class="form-control @error('password') is-invalid @enderror" 
+                                       id="password" 
+                                       name="password" 
+                                       required 
+                                       autocomplete="new-password">
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        data-password-toggle="#password"
+                                        aria-label="Show password"
+                                        title="Show password">
+                                    <i class="bi bi-eye-slash"></i>
+                                </button>
+                                @error('password')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
                         </div>
 
                         <div class="mb-3">
                             <label for="password-confirm" class="form-label">Confirm Password</label>
-                            <input type="password" 
-                                   class="form-control" 
-                                   id="password-confirm" 
-                                   name="password_confirmation" 
-                                   required 
-                                   autocomplete="new-password">
+                            <div class="input-group">
+                                <input type="password" 
+                                       class="form-control" 
+                                       id="password-confirm" 
+                                       name="password_confirmation" 
+                                       required 
+                                       autocomplete="new-password">
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        data-password-toggle="#password-confirm"
+                                        aria-label="Show password"
+                                        title="Show password">
+                                    <i class="bi bi-eye-slash"></i>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="d-grid">
