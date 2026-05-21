@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Product extends Model
 {
@@ -45,7 +46,15 @@ class Product extends Model
      */
     public function getImageUrlAttribute(): string
     {
-        return $this->image ? asset('storage/' . $this->image) : asset('images/default-product.svg');
+        if (! $this->image) {
+            return route('products.generated-image', $this);
+        }
+
+        if (Str::startsWith($this->image, ['http://', 'https://', 'images/'])) {
+            return asset($this->image);
+        }
+
+        return asset('storage/' . $this->image);
     }
 
     /**

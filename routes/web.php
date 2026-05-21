@@ -8,6 +8,9 @@ Route::get('/', function () {
     return redirect()->route('menu.index');
 });
 
+Route::get('/product-images/{product}.svg', [App\Http\Controllers\ProductImageController::class, 'show'])
+    ->name('products.generated-image');
+
 // Guest Routes (Auth)
 Route::middleware('guest')->group(function () {
     Route::get('register', [App\Http\Controllers\Auth\RegisteredUserController::class, 'create'])
