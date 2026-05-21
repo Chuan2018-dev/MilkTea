@@ -177,7 +177,7 @@
         </div>
     </nav>
 
-    <main>
+    <main @hasSection('auto_sync') data-auto-sync data-auto-sync-interval="@yield('auto_sync_interval', '10000')" @endif>
         @if(session('success'))
             <div class="container mt-3">
                 <div class="alert alert-success alert-dismissible fade show">
@@ -234,6 +234,67 @@
                 button.setAttribute('title', isHidden ? 'Hide password' : 'Show password');
             });
         });
+
+        const autoSyncRoot = document.querySelector('main[data-auto-sync]');
+
+        if (autoSyncRoot) {
+            const syncInterval = Math.max(
+                Number.parseInt(autoSyncRoot.dataset.autoSyncInterval || '10000', 10),
+                5000
+            );
+            let isSyncing = false;
+
+            const hasActiveFormControl = () => {
+                const activeElement = document.activeElement;
+
+                return Boolean(activeElement && activeElement.closest('form, .dropdown-menu, .modal'));
+            };
+
+            const syncPage = async () => {
+                if (isSyncing || document.hidden || hasActiveFormControl()) {
+                    return;
+                }
+
+                isSyncing = true;
+
+                try {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('_sync', Date.now().toString());
+
+                    const response = await fetch(url.toString(), {
+                        cache: 'no-store',
+                        credentials: 'same-origin',
+                        headers: {
+                            'X-Auto-Sync': 'true',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    const html = await response.text();
+                    const nextDocument = new DOMParser().parseFromString(html, 'text/html');
+                    const nextMain = nextDocument.querySelector('main[data-auto-sync], main');
+
+                    if (nextMain && nextMain.innerHTML.trim() && nextMain.innerHTML !== autoSyncRoot.innerHTML) {
+                        autoSyncRoot.innerHTML = nextMain.innerHTML;
+                    }
+                } catch (error) {
+                    console.debug('Auto-sync skipped.', error);
+                } finally {
+                    isSyncing = false;
+                }
+            };
+
+            window.setInterval(syncPage, syncInterval);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    syncPage();
+                }
+            });
+        }
     </script>
     
     @stack('scripts')

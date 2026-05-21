@@ -1,6 +1,8 @@
 @extends('layouts.app')
 
 @section('title', 'Order ' . $order->order_number . ' - Admin - Milk Tea Shop')
+@section('auto_sync', 'true')
+@section('auto_sync_interval', '10000')
 
 @section('content')
 <div class="container-fluid">
