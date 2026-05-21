@@ -34,11 +34,14 @@ class MenuController extends Controller
                     $query->where('name', 'like', "%{$phrase}%")
                         ->orWhere('description', 'like', "%{$phrase}%");
 
-                    foreach ($terms as $term) {
-                        $term = $this->escapeLike($term);
+                    if ($terms) {
+                        $query->orWhere(function ($query) use ($terms) {
+                            foreach ($terms as $term) {
+                                $term = $this->escapeLike($term);
 
-                        $query->orWhere('name', 'like', "%{$term}%")
-                            ->orWhere('description', 'like', "%{$term}%");
+                                $query->where('name', 'like', "%{$term}%");
+                            }
+                        });
                     }
                 });
             })
