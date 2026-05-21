@@ -52,12 +52,21 @@
         <div class="col-md-6">
             <form action="{{ route('menu.index') }}" method="GET" class="d-flex">
                 <input type="text" name="search" class="form-control" placeholder="Search products..." 
-                       value="{{ request('search') }}">
+                       value="{{ $search }}">
                 <button type="submit" class="btn btn-primary ms-2">
                     <i class="bi bi-search"></i>
                 </button>
             </form>
         </div>
+        @if($search !== '')
+            <div class="col-12 mt-3">
+                <div class="search-result-note">
+                    <i class="bi bi-search me-2"></i>
+                    Showing results for <strong>{{ $search }}</strong>
+                    <a href="{{ route('menu.index') }}" class="ms-2">Clear</a>
+                </div>
+            </div>
+        @endif
     </div>
 
     <!-- Products Grid -->
@@ -256,6 +265,19 @@
     .pearl-two { left: 54px; bottom: 12px; }
     .pearl-three { right: 38px; }
     .pearl-four { right: 14px; bottom: 38px; }
+
+    .search-result-note {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.2rem;
+        padding: 0.55rem 0.8rem;
+        border-radius: 8px;
+        background: #fff7eb;
+        color: #5f351b;
+        font-size: 0.95rem;
+        border: 1px solid rgba(139, 90, 43, 0.18);
+    }
 
     @media (max-width: 767.98px) {
         .menu-hero {
