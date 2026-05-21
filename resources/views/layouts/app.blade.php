@@ -177,7 +177,7 @@
         </div>
     </nav>
 
-    <main @hasSection('auto_sync') data-auto-sync data-auto-sync-interval="@yield('auto_sync_interval', '10000')" @endif>
+    <main @hasSection('auto_sync') data-auto-sync data-auto-sync-interval="@yield('auto_sync_interval', '20000')" @endif>
         @if(session('success'))
             <div class="container mt-3">
                 <div class="alert alert-success alert-dismissible fade show">
@@ -239,7 +239,7 @@
 
         if (autoSyncRoot) {
             const syncInterval = Math.max(
-                Number.parseInt(autoSyncRoot.dataset.autoSyncInterval || '10000', 10),
+                Number.parseInt(autoSyncRoot.dataset.autoSyncInterval || '20000', 10),
                 5000
             );
             let isSyncing = false;

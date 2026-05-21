@@ -2,7 +2,7 @@
 
 @section('title', 'Admin Dashboard - Milk Tea Shop')
 @section('auto_sync', 'true')
-@section('auto_sync_interval', '10000')
+@section('auto_sync_interval', '20000')
 
 @section('content')
 <div class="container-fluid">
