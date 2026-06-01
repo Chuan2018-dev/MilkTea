@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:pointycastle/export.dart' as crypto;
 
 void main() {
   runApp(const MilkTeaMobileApp());
@@ -397,21 +399,52 @@ class CatalogSnapshot {
 }
 
 class ApiClient {
-  const ApiClient({
+  ApiClient({
     this.baseUrl = _liveApiUrl,
     this.enabled = _liveApiEnabled,
   });
 
   final String baseUrl;
   final bool enabled;
+  String? _infinityFreeCookie;
 
   Uri _uri(String path) => Uri.parse('$baseUrl$path');
 
-  Map<String, String> _headers([String? token]) => {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    if (token != null) 'Authorization': 'Bearer $token',
-  };
+  Map<String, String> _headers([String? token]) {
+    final cookie = _infinityFreeCookie;
+    final headers = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+    if (cookie != null) {
+      headers['Cookie'] = cookie;
+    }
+    return headers;
+  }
+
+  Future<http.Response> _send(
+    String method,
+    Uri uri, {
+    String? token,
+    Map<String, dynamic>? body,
+  }) {
+    return switch (method) {
+      'GET' => http
+          .get(uri, headers: _headers(token))
+          .timeout(const Duration(seconds: 12)),
+      'POST' => http
+          .post(uri, headers: _headers(token), body: jsonEncode(body))
+          .timeout(const Duration(seconds: 12)),
+      'PATCH' => http
+          .patch(uri, headers: _headers(token), body: jsonEncode(body))
+          .timeout(const Duration(seconds: 12)),
+      'PUT' => http
+          .put(uri, headers: _headers(token), body: jsonEncode(body))
+          .timeout(const Duration(seconds: 12)),
+      _ => throw ApiException('Unsupported API method: $method'),
+    };
+  }
 
   Future<Map<String, dynamic>> _request(
     String method,
@@ -423,21 +456,32 @@ class ApiClient {
       throw const ApiException('Live API is disabled.');
     }
 
-    final response = await switch (method) {
-      'GET' => http
-          .get(_uri(path), headers: _headers(token))
-          .timeout(const Duration(seconds: 12)),
-      'POST' => http
-          .post(_uri(path), headers: _headers(token), body: jsonEncode(body))
-          .timeout(const Duration(seconds: 12)),
-      'PATCH' => http
-          .patch(_uri(path), headers: _headers(token), body: jsonEncode(body))
-          .timeout(const Duration(seconds: 12)),
-      'PUT' => http
-          .put(_uri(path), headers: _headers(token), body: jsonEncode(body))
-          .timeout(const Duration(seconds: 12)),
-      _ => throw ApiException('Unsupported API method: $method'),
-    };
+    if (method != 'GET' && _infinityFreeCookie == null) {
+      await _primeInfinityFreeCookie();
+    }
+
+    var uri = _uri(path);
+    var response = await _send(method, uri, token: token, body: body);
+
+    if (_isInfinityFreeChallenge(response)) {
+      if (method == 'GET') {
+        final cookie = infinityFreeCookieFromChallenge(response.body);
+        if (cookie == null) {
+          throw const ApiException('Unable to pass hosting security check.');
+        }
+        _infinityFreeCookie = '__test=$cookie';
+        uri = uri.replace(
+          queryParameters: {
+            ...uri.queryParameters,
+            'i': '1',
+          },
+        );
+        response = await _send(method, uri, token: token, body: body);
+      } else {
+        await _primeInfinityFreeCookie(force: true);
+        response = await _send(method, uri, token: token, body: body);
+      }
+    }
 
     final decoded = response.body.isEmpty
         ? <String, dynamic>{}
@@ -451,6 +495,29 @@ class ApiClient {
     }
 
     return decoded;
+  }
+
+  bool _isInfinityFreeChallenge(http.Response response) {
+    final contentType = response.headers['content-type'] ?? '';
+    return contentType.contains('text/html') &&
+        response.body.contains('slowAES.decrypt') &&
+        response.body.contains('__test=');
+  }
+
+  Future<void> _primeInfinityFreeCookie({bool force = false}) async {
+    if (_infinityFreeCookie != null && !force) {
+      return;
+    }
+
+    final response = await _send('GET', _uri('/catalog'));
+    if (!_isInfinityFreeChallenge(response)) {
+      return;
+    }
+
+    final cookie = infinityFreeCookieFromChallenge(response.body);
+    if (cookie != null) {
+      _infinityFreeCookie = '__test=$cookie';
+    }
   }
 
   Future<CatalogSnapshot> fetchCatalog() async {
@@ -628,8 +695,9 @@ class ApiClient {
 }
 
 class AppState extends ChangeNotifier {
-  AppState.seeded({this.api = const ApiClient()})
-    : users = [
+  AppState.seeded({ApiClient? api})
+    : api = api ?? ApiClient(),
+      users = [
         const AppUser(
           id: 1,
           name: 'Administrator',
@@ -649,7 +717,7 @@ class AppState extends ChangeNotifier {
           address: '456 Customer Ave, Quezon City, Philippines',
         ),
       ] {
-    if (api.enabled) {
+    if (this.api.enabled) {
       unawaited(refreshFromApi());
       _syncTimer = Timer.periodic(
         _syncInterval,
@@ -1347,6 +1415,46 @@ double doubleValue(Object? value) {
     return value.toDouble();
   }
   return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+String? infinityFreeCookieFromChallenge(String html) {
+  final values = RegExp(
+    r'toNumbers\("([0-9a-fA-F]+)"\)',
+  ).allMatches(html).map((match) => match.group(1)!).toList();
+
+  if (values.length < 3) {
+    return null;
+  }
+
+  final key = hexToBytes(values[0]);
+  final iv = hexToBytes(values[1]);
+  final encrypted = hexToBytes(values[2]);
+
+  final cipher = crypto.CBCBlockCipher(crypto.AESEngine())
+    ..init(false, crypto.ParametersWithIV(crypto.KeyParameter(key), iv));
+  final decrypted = Uint8List(encrypted.length);
+
+  for (var offset = 0; offset < encrypted.length; offset += cipher.blockSize) {
+    cipher.processBlock(encrypted, offset, decrypted, offset);
+  }
+
+  return bytesToHex(decrypted);
+}
+
+Uint8List hexToBytes(String hex) {
+  final bytes = Uint8List(hex.length ~/ 2);
+  for (var index = 0; index < bytes.length; index++) {
+    bytes[index] = int.parse(hex.substring(index * 2, index * 2 + 2), radix: 16);
+  }
+  return bytes;
+}
+
+String bytesToHex(List<int> bytes) {
+  final buffer = StringBuffer();
+  for (final byte in bytes) {
+    buffer.write(byte.toRadixString(16).padLeft(2, '0'));
+  }
+  return buffer.toString();
 }
 
 const sugarLevels = ['0%', '25%', '50%', '75%', '100%'];
