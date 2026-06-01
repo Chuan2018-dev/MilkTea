@@ -119,6 +119,22 @@ class AppUser {
   final UserRole role;
   final String phone;
   final String address;
+
+  AppUser copyWith({
+    String? name,
+    String? password,
+    String? phone,
+    String? address,
+  }) {
+    return AppUser(
+      name: name ?? this.name,
+      email: email,
+      password: password ?? this.password,
+      role: role,
+      phone: phone ?? this.phone,
+      address: address ?? this.address,
+    );
+  }
 }
 
 class Product {
@@ -141,6 +157,23 @@ class Product {
   final Color secondary;
 
   String get formattedPrice => peso(basePrice);
+
+  Product copyWith({
+    String? name,
+    String? description,
+    double? basePrice,
+    String? category,
+  }) {
+    return Product(
+      id: id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      basePrice: basePrice ?? this.basePrice,
+      category: category ?? this.category,
+      primary: primary,
+      secondary: secondary,
+    );
+  }
 }
 
 class SizeOption {
@@ -153,6 +186,14 @@ class SizeOption {
   final String name;
   final String displayName;
   final double adjustment;
+
+  SizeOption copyWith({String? displayName, double? adjustment}) {
+    return SizeOption(
+      name: name,
+      displayName: displayName ?? this.displayName,
+      adjustment: adjustment ?? this.adjustment,
+    );
+  }
 }
 
 class AddOnOption {
@@ -165,6 +206,14 @@ class AddOnOption {
   final String name;
   final String description;
   final double price;
+
+  AddOnOption copyWith({String? name, String? description, double? price}) {
+    return AddOnOption(
+      name: name ?? this.name,
+      description: description ?? this.description,
+      price: price ?? this.price,
+    );
+  }
 }
 
 class CartItem {
@@ -327,6 +376,33 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateCurrentUser({
+    required String name,
+    required String phone,
+    required String address,
+    String? password,
+  }) {
+    final user = currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final updated = user.copyWith(
+      name: name.trim(),
+      phone: phone.trim(),
+      address: address.trim(),
+      password: password == null || password.trim().isEmpty
+          ? user.password
+          : password,
+    );
+    final index = users.indexWhere((item) => item.email == user.email);
+    if (index != -1) {
+      users[index] = updated;
+    }
+    currentUser = updated;
+    notifyListeners();
+  }
+
   void addToCart(CartItem item) {
     cart.add(item);
     notifyListeners();
@@ -411,6 +487,35 @@ class AppState extends ChangeNotifier {
       return [];
     }
     return orders.where((order) => order.userEmail == user.email).toList();
+  }
+
+  void updateProduct(Product updatedProduct) {
+    final index = products.indexWhere(
+      (product) => product.id == updatedProduct.id,
+    );
+    if (index == -1) {
+      return;
+    }
+    products[index] = updatedProduct;
+    notifyListeners();
+  }
+
+  void updateAddOn(AddOnOption currentAddOn, AddOnOption updatedAddOn) {
+    final index = addOns.indexOf(currentAddOn);
+    if (index == -1) {
+      return;
+    }
+    addOns[index] = updatedAddOn;
+    notifyListeners();
+  }
+
+  void updateSize(SizeOption currentSize, SizeOption updatedSize) {
+    final index = sizes.indexOf(currentSize);
+    if (index == -1) {
+      return;
+    }
+    sizes[index] = updatedSize;
+    notifyListeners();
   }
 }
 
@@ -526,27 +631,47 @@ final products = <Product>[
   ),
 ];
 
-const sizes = <SizeOption>[
-  SizeOption(name: 'small', displayName: 'Small (12oz)', adjustment: 0),
-  SizeOption(name: 'medium', displayName: 'Medium (16oz)', adjustment: 10),
-  SizeOption(name: 'large', displayName: 'Large (22oz)', adjustment: 20),
+final sizes = <SizeOption>[
+  const SizeOption(name: 'small', displayName: 'Small (12oz)', adjustment: 0),
+  const SizeOption(
+    name: 'medium',
+    displayName: 'Medium (16oz)',
+    adjustment: 10,
+  ),
+  const SizeOption(name: 'large', displayName: 'Large (22oz)', adjustment: 20),
 ];
 
-const addOns = <AddOnOption>[
-  AddOnOption(name: 'Pearl', description: 'Chewy tapioca pearls', price: 10),
-  AddOnOption(name: 'Nata', description: 'Sweet coconut jelly', price: 10),
-  AddOnOption(name: 'Pudding', description: 'Creamy egg pudding', price: 15),
-  AddOnOption(
+final addOns = <AddOnOption>[
+  const AddOnOption(
+    name: 'Pearl',
+    description: 'Chewy tapioca pearls',
+    price: 10,
+  ),
+  const AddOnOption(
+    name: 'Nata',
+    description: 'Sweet coconut jelly',
+    price: 10,
+  ),
+  const AddOnOption(
+    name: 'Pudding',
+    description: 'Creamy egg pudding',
+    price: 15,
+  ),
+  const AddOnOption(
     name: 'Grass Jelly',
     description: 'Refreshing herbal jelly',
     price: 10,
   ),
-  AddOnOption(
+  const AddOnOption(
     name: 'Aloe Vera',
     description: 'Healthy aloe vera pieces',
     price: 15,
   ),
-  AddOnOption(name: 'Red Bean', description: 'Sweet red beans', price: 15),
+  const AddOnOption(
+    name: 'Red Bean',
+    description: 'Sweet red beans',
+    price: 15,
+  ),
 ];
 
 const sugarLevels = ['0%', '25%', '50%', '75%', '100%'];
@@ -854,6 +979,181 @@ class AuthScaffold extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final formKey = GlobalKey<FormState>();
+  late final TextEditingController name;
+  late final TextEditingController phone;
+  late final TextEditingController address;
+  final password = TextEditingController();
+  final confirmPassword = TextEditingController();
+  bool showPassword = false;
+  bool showConfirmPassword = false;
+  bool initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (initialized) {
+      return;
+    }
+    final user = AppScope.of(context).currentUser!;
+    name = TextEditingController(text: user.name);
+    phone = TextEditingController(text: user.phone);
+    address = TextEditingController(text: user.address);
+    initialized = true;
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    phone.dispose();
+    address.dispose();
+    password.dispose();
+    confirmPassword.dispose();
+    super.dispose();
+  }
+
+  void submit() {
+    if (!formKey.currentState!.validate()) {
+      return;
+    }
+
+    AppScope.of(context).updateCurrentUser(
+      name: name.text,
+      phone: phone.text,
+      address: address.text,
+      password: password.text.trim().isEmpty ? null : password.text,
+    );
+    Navigator.of(context).pop();
+    showSnack(context, 'Profile updated.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = AppScope.of(context).currentUser!;
+    return Scaffold(
+      appBar: const MilkTeaAppBar(title: 'Profile'),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          SectionCard(
+            title: 'Account Information',
+            icon: Icons.person_outline,
+            child: Form(
+              key: formKey,
+              child: Column(
+                children: [
+                  TextFormField(
+                    controller: name,
+                    decoration: const InputDecoration(labelText: 'Full Name'),
+                    validator: requiredField,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    initialValue: user.email,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Email Address',
+                      helperText: 'Email is used as the login account.',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: phone,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: address,
+                    minLines: 2,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: 'Address'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: password,
+                    obscureText: !showPassword,
+                    decoration: InputDecoration(
+                      labelText: 'New Password',
+                      helperText: 'Leave blank to keep current password.',
+                      suffixIcon: IconButton(
+                        tooltip: showPassword
+                            ? 'Hide password'
+                            : 'Show password',
+                        icon: Icon(
+                          showPassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: () =>
+                            setState(() => showPassword = !showPassword),
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return null;
+                      }
+                      return value.length >= 8 ? null : 'Minimum 8 characters';
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: confirmPassword,
+                    obscureText: !showConfirmPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm New Password',
+                      suffixIcon: IconButton(
+                        tooltip: showConfirmPassword
+                            ? 'Hide password'
+                            : 'Show password',
+                        icon: Icon(
+                          showConfirmPassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: () => setState(
+                          () => showConfirmPassword = !showConfirmPassword,
+                        ),
+                      ),
+                    ),
+                    validator: (value) {
+                      if (password.text.trim().isEmpty) {
+                        return null;
+                      }
+                      return value == password.text
+                          ? null
+                          : 'Passwords do not match';
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: submit,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Save Profile'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1190,8 +1490,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       selected: selectedSize == size,
                       label: Text(
                         size.adjustment == 0
-                            ? '${size.displayName} · Base'
-                            : '${size.displayName} · +${peso(size.adjustment)}',
+                            ? '${size.displayName} | Base'
+                            : '${size.displayName} | +${peso(size.adjustment)}',
                       ),
                       onSelected: (_) => setState(() => selectedSize = size),
                     ),
@@ -1365,10 +1665,14 @@ class CartItemTile extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: ProductArt(
-                product: item.product,
+              child: SizedBox(
+                width: 82,
                 height: 82,
-                compact: true,
+                child: ProductArt(
+                  product: item.product,
+                  height: 82,
+                  compact: true,
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -1382,7 +1686,7 @@ class CartItemTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${item.size.displayName} · Sugar ${item.sugarLevel} · ${labelize(item.iceLevel)}',
+                    '${item.size.displayName} | Sugar ${item.sugarLevel} | ${labelize(item.iceLevel)}',
                     style: const TextStyle(color: Colors.black54, fontSize: 12),
                   ),
                   if (item.addOns.isNotEmpty)
@@ -1442,14 +1746,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final notes = TextEditingController();
   String paymentMethod = 'cash';
   String pickupMethod = 'in_store';
+  bool initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (initialized) {
+      return;
+    }
     final user = AppScope.of(context).currentUser!;
     customerName = TextEditingController(text: user.name);
     contactNumber = TextEditingController(text: user.phone);
     address = TextEditingController(text: user.address);
+    initialized = true;
   }
 
   @override
@@ -1672,7 +1981,7 @@ class AdminDashboardScreen extends StatelessWidget {
               crossAxisCount: columns,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1.7,
+              childAspectRatio: columns == 4 ? 1.7 : 1.2,
               children: [
                 StatCard(
                   label: "Today's Orders",
@@ -1817,15 +2126,19 @@ class OrderDetailsBody extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   leading: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: ProductArt(
-                      product: item.product,
+                    child: SizedBox(
+                      width: 58,
                       height: 58,
-                      compact: true,
+                      child: ProductArt(
+                        product: item.product,
+                        height: 58,
+                        compact: true,
+                      ),
                     ),
                   ),
                   title: Text(item.product.name),
                   subtitle: Text(
-                    '${item.quantity} x ${peso(item.unitPrice)} · ${item.size.displayName} · Sugar ${item.sugarLevel}',
+                    '${item.quantity} x ${peso(item.unitPrice)} | ${item.size.displayName} | Sugar ${item.sugarLevel}',
                   ),
                   trailing: Text(
                     peso(item.total),
@@ -1963,19 +2276,7 @@ class AdminCatalogScreen extends StatelessWidget {
                 CatalogList(
                   children: products
                       .map(
-                        (product) => ListTile(
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: ProductArt(
-                              product: product,
-                              height: 54,
-                              compact: true,
-                            ),
-                          ),
-                          title: Text(product.name),
-                          subtitle: Text(labelize(product.category)),
-                          trailing: PriceBadge(text: product.formattedPrice),
-                        ),
+                        (product) => AdminProductCatalogCard(product: product),
                       )
                       .toList(),
                 ),
@@ -1989,7 +2290,15 @@ class AdminCatalogScreen extends StatelessWidget {
                           ),
                           title: Text(addOn.name),
                           subtitle: Text(addOn.description),
-                          trailing: PriceBadge(text: peso(addOn.price)),
+                          trailing: CatalogTrailingActions(
+                            priceText: peso(addOn.price),
+                            tooltip: 'Edit ${addOn.name}',
+                            onEdit: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => AddOnEditScreen(addOn: addOn),
+                              ),
+                            ),
+                          ),
                         ),
                       )
                       .toList(),
@@ -2005,10 +2314,16 @@ class AdminCatalogScreen extends StatelessWidget {
                                 ? 'Base price'
                                 : 'Price adjustment',
                           ),
-                          trailing: PriceBadge(
-                            text: size.adjustment == 0
+                          trailing: CatalogTrailingActions(
+                            priceText: size.adjustment == 0
                                 ? 'Base'
                                 : '+${peso(size.adjustment)}',
+                            tooltip: 'Edit ${size.displayName}',
+                            onEdit: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => SizeEditScreen(size: size),
+                              ),
+                            ),
                           ),
                         ),
                       )
@@ -2019,6 +2334,434 @@ class AdminCatalogScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class AdminProductCatalogCard extends StatelessWidget {
+  const AdminProductCatalogCard({required this.product, super.key});
+
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: ProductArt(product: product, height: 112, compact: true),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      labelize(product.category),
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  PriceBadge(text: product.formattedPrice),
+                  const SizedBox(height: 8),
+                  IconButton.filledTonal(
+                    tooltip: 'Edit ${product.name}',
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ProductEditScreen(productId: product.id),
+                      ),
+                    ),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ProductEditScreen extends StatefulWidget {
+  const ProductEditScreen({required this.productId, super.key});
+
+  final int productId;
+
+  @override
+  State<ProductEditScreen> createState() => _ProductEditScreenState();
+}
+
+class _ProductEditScreenState extends State<ProductEditScreen> {
+  final formKey = GlobalKey<FormState>();
+  late Product product;
+  late final TextEditingController name;
+  late final TextEditingController description;
+  late final TextEditingController basePrice;
+  late String category;
+
+  @override
+  void initState() {
+    super.initState();
+    product = products.firstWhere((item) => item.id == widget.productId);
+    name = TextEditingController(text: product.name);
+    description = TextEditingController(text: product.description);
+    basePrice = TextEditingController(
+      text: product.basePrice.toStringAsFixed(2),
+    );
+    category = product.category;
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    description.dispose();
+    basePrice.dispose();
+    super.dispose();
+  }
+
+  void submit() {
+    if (!formKey.currentState!.validate()) {
+      return;
+    }
+
+    AppScope.of(context).updateProduct(
+      product.copyWith(
+        name: name.text.trim(),
+        description: description.text.trim(),
+        basePrice: parseAmount(basePrice.text),
+        category: category,
+      ),
+    );
+    Navigator.of(context).pop();
+    showSnack(context, 'Product updated.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: const MilkTeaAppBar(title: 'Edit Product'),
+      body: EditFormShell(
+        icon: Icons.inventory_2_outlined,
+        title: product.name,
+        child: Form(
+          key: formKey,
+          child: Column(
+            children: [
+              ProductArt(product: product, height: 140),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: name,
+                decoration: const InputDecoration(labelText: 'Product Name'),
+                validator: requiredField,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: description,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Description'),
+                validator: requiredField,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: basePrice,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Base Price'),
+                validator: amountValidator,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: category,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: const [
+                  DropdownMenuItem(value: 'milk_tea', child: Text('Milk Tea')),
+                  DropdownMenuItem(
+                    value: 'fruit_tea',
+                    child: Text('Fruit Tea'),
+                  ),
+                  DropdownMenuItem(value: 'coffee', child: Text('Coffee')),
+                ],
+                onChanged: (value) =>
+                    setState(() => category = value ?? 'milk_tea'),
+              ),
+              const SizedBox(height: 16),
+              SaveButton(onPressed: submit),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AddOnEditScreen extends StatefulWidget {
+  const AddOnEditScreen({required this.addOn, super.key});
+
+  final AddOnOption addOn;
+
+  @override
+  State<AddOnEditScreen> createState() => _AddOnEditScreenState();
+}
+
+class _AddOnEditScreenState extends State<AddOnEditScreen> {
+  final formKey = GlobalKey<FormState>();
+  late final TextEditingController name;
+  late final TextEditingController description;
+  late final TextEditingController price;
+
+  @override
+  void initState() {
+    super.initState();
+    name = TextEditingController(text: widget.addOn.name);
+    description = TextEditingController(text: widget.addOn.description);
+    price = TextEditingController(text: widget.addOn.price.toStringAsFixed(2));
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    description.dispose();
+    price.dispose();
+    super.dispose();
+  }
+
+  void submit() {
+    if (!formKey.currentState!.validate()) {
+      return;
+    }
+
+    AppScope.of(context).updateAddOn(
+      widget.addOn,
+      widget.addOn.copyWith(
+        name: name.text.trim(),
+        description: description.text.trim(),
+        price: parseAmount(price.text),
+      ),
+    );
+    Navigator.of(context).pop();
+    showSnack(context, 'Add-on updated.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: const MilkTeaAppBar(title: 'Edit Add-on'),
+      body: EditFormShell(
+        icon: Icons.add_circle_outline,
+        title: widget.addOn.name,
+        child: Form(
+          key: formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: name,
+                decoration: const InputDecoration(labelText: 'Add-on Name'),
+                validator: requiredField,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: description,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Description'),
+                validator: requiredField,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: price,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Price'),
+                validator: amountValidator,
+              ),
+              const SizedBox(height: 16),
+              SaveButton(onPressed: submit),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SizeEditScreen extends StatefulWidget {
+  const SizeEditScreen({required this.size, super.key});
+
+  final SizeOption size;
+
+  @override
+  State<SizeEditScreen> createState() => _SizeEditScreenState();
+}
+
+class _SizeEditScreenState extends State<SizeEditScreen> {
+  final formKey = GlobalKey<FormState>();
+  late final TextEditingController displayName;
+  late final TextEditingController adjustment;
+
+  @override
+  void initState() {
+    super.initState();
+    displayName = TextEditingController(text: widget.size.displayName);
+    adjustment = TextEditingController(
+      text: widget.size.adjustment.toStringAsFixed(2),
+    );
+  }
+
+  @override
+  void dispose() {
+    displayName.dispose();
+    adjustment.dispose();
+    super.dispose();
+  }
+
+  void submit() {
+    if (!formKey.currentState!.validate()) {
+      return;
+    }
+
+    AppScope.of(context).updateSize(
+      widget.size,
+      widget.size.copyWith(
+        displayName: displayName.text.trim(),
+        adjustment: parseAmount(adjustment.text),
+      ),
+    );
+    Navigator.of(context).pop();
+    showSnack(context, 'Size updated.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: const MilkTeaAppBar(title: 'Edit Size'),
+      body: EditFormShell(
+        icon: Icons.straighten,
+        title: widget.size.displayName,
+        child: Form(
+          key: formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                initialValue: labelize(widget.size.name),
+                readOnly: true,
+                decoration: const InputDecoration(labelText: 'Size Code'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: displayName,
+                decoration: const InputDecoration(labelText: 'Display Name'),
+                validator: requiredField,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: adjustment,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Price Adjustment',
+                ),
+                validator: amountValidator,
+              ),
+              const SizedBox(height: 16),
+              SaveButton(onPressed: submit),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class EditFormShell extends StatelessWidget {
+  const EditFormShell({
+    required this.icon,
+    required this.title,
+    required this.child,
+    super.key,
+  });
+
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [SectionCard(title: title, icon: icon, child: child)],
+    );
+  }
+}
+
+class SaveButton extends StatelessWidget {
+  const SaveButton({required this.onPressed, super.key});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.save_outlined),
+        label: const Text('Save Changes'),
+      ),
+    );
+  }
+}
+
+class CatalogTrailingActions extends StatelessWidget {
+  const CatalogTrailingActions({
+    required this.priceText,
+    required this.tooltip,
+    required this.onEdit,
+    super.key,
+  });
+
+  final String priceText;
+  final String tooltip;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PriceBadge(text: priceText),
+        const SizedBox(width: 6),
+        IconButton.filledTonal(
+          tooltip: tooltip,
+          onPressed: onEdit,
+          icon: const Icon(Icons.edit_outlined),
+        ),
+      ],
     );
   }
 }
@@ -2082,17 +2825,19 @@ class BrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.local_cafe, color: _brand, size: 34),
-        SizedBox(width: 10),
-        Text(
-          'Milk Tea Shop',
-          style: TextStyle(
-            color: _brandDark,
-            fontSize: 28,
-            fontWeight: FontWeight.w900,
+        const Icon(Icons.local_cafe, color: _brand, size: 34),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            'Milk Tea Shop',
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: _brandDark,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ),
       ],
@@ -2111,6 +2856,11 @@ class UserMenu extends StatelessWidget {
     return PopupMenuButton<String>(
       tooltip: name,
       onSelected: (value) {
+        if (value == 'profile') {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+        }
         if (value == 'logout') {
           onLogout();
         }
@@ -2118,6 +2868,14 @@ class UserMenu extends StatelessWidget {
       itemBuilder: (context) => [
         PopupMenuItem(enabled: false, child: Text(name)),
         const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'profile',
+          child: ListTile(
+            leading: Icon(Icons.person_outline),
+            title: Text('Profile'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
         const PopupMenuItem(value: 'logout', child: Text('Logout')),
       ],
       child: Padding(
@@ -2788,7 +3546,7 @@ class OrderTile extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w900),
         ),
         subtitle: Text(
-          '${order.customerName} · ${formatDate(order.createdAt)}',
+          '${order.customerName} | ${formatDate(order.createdAt)}',
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -3025,6 +3783,21 @@ String? requiredField(String? value) {
     return 'Required';
   }
   return null;
+}
+
+String? amountValidator(String? value) {
+  if (value == null || value.trim().isEmpty) {
+    return 'Required';
+  }
+  final amount = double.tryParse(value.trim().replaceAll(',', ''));
+  if (amount == null || amount < 0) {
+    return 'Enter a valid amount';
+  }
+  return null;
+}
+
+double parseAmount(String value) {
+  return double.parse(value.trim().replaceAll(',', ''));
 }
 
 String peso(double value) => 'PHP ${value.toStringAsFixed(2)}';
