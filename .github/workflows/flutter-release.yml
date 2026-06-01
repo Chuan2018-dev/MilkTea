@@ -48,12 +48,13 @@ jobs:
       - name: Prepare APK asset
         run: |
           mkdir -p release-assets
-          cp milk_tea_flutter/build/app/outputs/flutter-apk/app-release.apk "release-assets/MilkTea-Flutter-${GITHUB_REF_NAME}.apk"
+          VERSION="${GITHUB_REF_NAME#flutter-v}"
+          cp milk_tea_flutter/build/app/outputs/flutter-apk/app-release.apk "release-assets/MilkTea-Flutter-v${VERSION}.apk"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "Milk Tea Flutter ${GITHUB_REF_NAME}"
+          name: "Milk Tea Flutter ${{ github.ref_name }}"
           body: |
             Flutter APK release for the Milk Tea Shop mobile app.
 
