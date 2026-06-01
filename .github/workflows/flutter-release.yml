@@ -43,7 +43,10 @@ jobs:
 
       - name: Build release APK
         working-directory: milk_tea_flutter
-        run: flutter build apk --release
+        run: >
+          flutter build apk --release
+          --dart-define=MILK_TEA_LIVE_API=true
+          --dart-define=MILK_TEA_API_URL=https://milkteashop.infinityfreeapp.com/api/mobile
 
       - name: Prepare APK asset
         run: |
@@ -59,6 +62,7 @@ jobs:
             Flutter APK release for the Milk Tea Shop mobile app.
 
             Included features:
+            - Live Laravel API sync every 20 seconds for catalog, profile, and orders
             - Login and registration with show/hide password controls
             - Customer menu, product search, customization, cart, and checkout
             - Customer order list and order details

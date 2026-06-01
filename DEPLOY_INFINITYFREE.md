@@ -29,6 +29,12 @@ Use this guide for the free online demo of the Milk Tea Ordering System.
 database/deployment/milktea_infinityfree.sql
 ```
 
+If your database was already imported before the mobile API update, run this SQL once in phpMyAdmin instead of re-importing the full database:
+
+```text
+database/deployment/mobile_api_token_patch.sql
+```
+
 ## 4. Upload Files
 
 Use the prepared ZIP package:
@@ -99,3 +105,13 @@ Open the live URL and test:
 - Add product to cart with size, sugar, ice, and add-ons
 - Checkout
 - Update order status in admin
+
+## 8. Mobile App API
+
+The Flutter APK uses this API base URL:
+
+```text
+https://milkteashop.infinityfreeapp.com/api/mobile
+```
+
+After uploading the updated Laravel files and running the SQL patch above, the APK can sync profile, catalog, orders, product edits, add-ons, and sizes with the live website database every 20 seconds while the app is open.

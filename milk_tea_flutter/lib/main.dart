@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MilkTeaMobileApp());
@@ -10,6 +14,18 @@ const _cream = Color(0xFFFFF7ED);
 const _surface = Color(0xFFF8F5F0);
 const _success = Color(0xFF1F8F55);
 const _warning = Color(0xFFFFC107);
+const _liveApiEnabled = bool.fromEnvironment(
+  'MILK_TEA_LIVE_API',
+  defaultValue: false,
+);
+const _liveApiUrl = String.fromEnvironment(
+  'MILK_TEA_API_URL',
+  defaultValue: 'https://milkteashop.infinityfreeapp.com/api/mobile',
+);
+const _syncInterval = Duration(seconds: 20);
+const apiStatusText = _liveApiEnabled
+    ? 'Live sync connecting...'
+    : 'Offline demo mode. Build with MILK_TEA_LIVE_API=true for live sync.';
 
 class MilkTeaMobileApp extends StatefulWidget {
   const MilkTeaMobileApp({super.key});
@@ -105,6 +121,7 @@ enum UserRole { customer, admin }
 
 class AppUser {
   const AppUser({
+    required this.id,
     required this.name,
     required this.email,
     required this.password,
@@ -113,6 +130,7 @@ class AppUser {
     this.address = '',
   });
 
+  final int id;
   final String name;
   final String email;
   final String password;
@@ -127,6 +145,7 @@ class AppUser {
     String? address,
   }) {
     return AppUser(
+      id: id,
       name: name ?? this.name,
       email: email,
       password: password ?? this.password,
@@ -146,6 +165,8 @@ class Product {
     required this.category,
     required this.primary,
     required this.secondary,
+    this.imageUrl = '',
+    this.isActive = true,
   });
 
   final int id;
@@ -155,6 +176,8 @@ class Product {
   final String category;
   final Color primary;
   final Color secondary;
+  final String imageUrl;
+  final bool isActive;
 
   String get formattedPrice => peso(basePrice);
 
@@ -163,6 +186,8 @@ class Product {
     String? description,
     double? basePrice,
     String? category,
+    String? imageUrl,
+    bool? isActive,
   }) {
     return Product(
       id: id,
@@ -172,46 +197,78 @@ class Product {
       category: category ?? this.category,
       primary: primary,
       secondary: secondary,
+      imageUrl: imageUrl ?? this.imageUrl,
+      isActive: isActive ?? this.isActive,
     );
   }
 }
 
 class SizeOption {
   const SizeOption({
+    required this.id,
     required this.name,
     required this.displayName,
     required this.adjustment,
+    this.isActive = true,
   });
 
+  final int id;
   final String name;
   final String displayName;
   final double adjustment;
+  final bool isActive;
 
-  SizeOption copyWith({String? displayName, double? adjustment}) {
+  SizeOption copyWith({
+    String? name,
+    String? displayName,
+    double? adjustment,
+    bool? isActive,
+  }) {
     return SizeOption(
-      name: name,
+      id: id,
+      name: name ?? this.name,
       displayName: displayName ?? this.displayName,
       adjustment: adjustment ?? this.adjustment,
+      isActive: isActive ?? this.isActive,
     );
   }
 }
 
 class AddOnOption {
   const AddOnOption({
+    required this.id,
     required this.name,
     required this.description,
     required this.price,
+    this.category = 'topping',
+    this.imageUrl = '',
+    this.isActive = true,
   });
 
+  final int id;
   final String name;
   final String description;
   final double price;
+  final String category;
+  final String imageUrl;
+  final bool isActive;
 
-  AddOnOption copyWith({String? name, String? description, double? price}) {
+  AddOnOption copyWith({
+    String? name,
+    String? description,
+    double? price,
+    String? category,
+    String? imageUrl,
+    bool? isActive,
+  }) {
     return AddOnOption(
+      id: id,
       name: name ?? this.name,
       description: description ?? this.description,
       price: price ?? this.price,
+      category: category ?? this.category,
+      imageUrl: imageUrl ?? this.imageUrl,
+      isActive: isActive ?? this.isActive,
     );
   }
 }
@@ -258,6 +315,7 @@ class CartItem {
 
 class Order {
   const Order({
+    required this.id,
     required this.number,
     required this.userEmail,
     required this.customerName,
@@ -272,6 +330,7 @@ class Order {
     this.notes = '',
   });
 
+  final int id;
   final String number;
   final String userEmail;
   final String customerName;
@@ -291,6 +350,7 @@ class Order {
 
   Order copyWith({String? status, String? paymentStatus}) {
     return Order(
+      id: id,
       number: number,
       userEmail: userEmail,
       customerName: customerName,
@@ -307,10 +367,271 @@ class Order {
   }
 }
 
+class ApiException implements Exception {
+  const ApiException(this.message, [this.statusCode]);
+
+  final String message;
+  final int? statusCode;
+
+  @override
+  String toString() => message;
+}
+
+class AuthResult {
+  const AuthResult({required this.token, required this.user});
+
+  final String token;
+  final AppUser user;
+}
+
+class CatalogSnapshot {
+  const CatalogSnapshot({
+    required this.products,
+    required this.sizes,
+    required this.addOns,
+  });
+
+  final List<Product> products;
+  final List<SizeOption> sizes;
+  final List<AddOnOption> addOns;
+}
+
+class ApiClient {
+  const ApiClient({
+    this.baseUrl = _liveApiUrl,
+    this.enabled = _liveApiEnabled,
+  });
+
+  final String baseUrl;
+  final bool enabled;
+
+  Uri _uri(String path) => Uri.parse('$baseUrl$path');
+
+  Map<String, String> _headers([String? token]) => {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    if (token != null) 'Authorization': 'Bearer $token',
+  };
+
+  Future<Map<String, dynamic>> _request(
+    String method,
+    String path, {
+    String? token,
+    Map<String, dynamic>? body,
+  }) async {
+    if (!enabled) {
+      throw const ApiException('Live API is disabled.');
+    }
+
+    final response = await switch (method) {
+      'GET' => http
+          .get(_uri(path), headers: _headers(token))
+          .timeout(const Duration(seconds: 12)),
+      'POST' => http
+          .post(_uri(path), headers: _headers(token), body: jsonEncode(body))
+          .timeout(const Duration(seconds: 12)),
+      'PATCH' => http
+          .patch(_uri(path), headers: _headers(token), body: jsonEncode(body))
+          .timeout(const Duration(seconds: 12)),
+      'PUT' => http
+          .put(_uri(path), headers: _headers(token), body: jsonEncode(body))
+          .timeout(const Duration(seconds: 12)),
+      _ => throw ApiException('Unsupported API method: $method'),
+    };
+
+    final decoded = response.body.isEmpty
+        ? <String, dynamic>{}
+        : jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        decoded['message']?.toString() ?? 'Request failed.',
+        response.statusCode,
+      );
+    }
+
+    return decoded;
+  }
+
+  Future<CatalogSnapshot> fetchCatalog() async {
+    final data = await _request('GET', '/catalog');
+    return CatalogSnapshot(
+      products: (data['products'] as List<dynamic>)
+          .map((item) => productFromJson(item as Map<String, dynamic>))
+          .toList(),
+      sizes: (data['sizes'] as List<dynamic>)
+          .map((item) => sizeFromJson(item as Map<String, dynamic>))
+          .toList(),
+      addOns: (data['add_ons'] as List<dynamic>)
+          .map((item) => addOnFromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Future<AuthResult> login(String email, String password) async {
+    final data = await _request('POST', '/login', body: {
+      'email': email,
+      'password': password,
+    });
+    return AuthResult(
+      token: data['token'].toString(),
+      user: userFromJson(data['user'] as Map<String, dynamic>, password),
+    );
+  }
+
+  Future<AuthResult> register({
+    required String name,
+    required String email,
+    required String password,
+    required String phone,
+    required String address,
+  }) async {
+    final data = await _request('POST', '/register', body: {
+      'name': name,
+      'email': email,
+      'password': password,
+      'phone': phone,
+      'address': address,
+    });
+    return AuthResult(
+      token: data['token'].toString(),
+      user: userFromJson(data['user'] as Map<String, dynamic>, password),
+    );
+  }
+
+  Future<AppUser> fetchMe(String token, String currentPassword) async {
+    final data = await _request('GET', '/me', token: token);
+    return userFromJson(data['user'] as Map<String, dynamic>, currentPassword);
+  }
+
+  Future<AppUser> updateProfile({
+    required String token,
+    required String currentPassword,
+    required String name,
+    required String phone,
+    required String address,
+    String? password,
+  }) async {
+    final data = await _request('PATCH', '/profile', token: token, body: {
+      'name': name,
+      'phone': phone,
+      'address': address,
+      if (password != null && password.trim().isNotEmpty) 'password': password,
+    });
+    return userFromJson(
+      data['user'] as Map<String, dynamic>,
+      password?.trim().isNotEmpty == true ? password! : currentPassword,
+    );
+  }
+
+  Future<List<Order>> fetchOrders(String token) async {
+    final data = await _request('GET', '/orders', token: token);
+    return (data['orders'] as List<dynamic>)
+        .map((item) => orderFromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Order> placeOrder(String token, List<CartItem> items, {
+    required String customerName,
+    required String contactNumber,
+    required String address,
+    required String paymentMethod,
+    required String pickupMethod,
+    required String notes,
+  }) async {
+    final data = await _request('POST', '/orders', token: token, body: {
+      'customer_name': customerName,
+      'contact_number': contactNumber,
+      'address': address,
+      'payment_method': paymentMethod,
+      'pickup_method': pickupMethod,
+      'notes': notes,
+      'items': items.map((item) => cartItemToJson(item)).toList(),
+    });
+    return orderFromJson(data['order'] as Map<String, dynamic>);
+  }
+
+  Future<Order> updateOrderStatus(
+    String token,
+    Order order,
+    String status,
+  ) async {
+    final data = await _request(
+      'PATCH',
+      '/orders/${order.id}/status',
+      token: token,
+      body: {'status': status},
+    );
+    return orderFromJson(data['order'] as Map<String, dynamic>);
+  }
+
+  Future<Order> updatePaymentStatus(
+    String token,
+    Order order,
+    String status,
+  ) async {
+    final data = await _request(
+      'PATCH',
+      '/orders/${order.id}/payment',
+      token: token,
+      body: {'payment_status': status},
+    );
+    return orderFromJson(data['order'] as Map<String, dynamic>);
+  }
+
+  Future<Product> updateProduct(String token, Product product) async {
+    final data = await _request(
+      'PUT',
+      '/products/${product.id}',
+      token: token,
+      body: {
+        'name': product.name,
+        'description': product.description,
+        'base_price': product.basePrice,
+        'category': product.category,
+        'is_active': product.isActive,
+      },
+    );
+    return productFromJson(data['product'] as Map<String, dynamic>);
+  }
+
+  Future<AddOnOption> updateAddOn(String token, AddOnOption addOn) async {
+    final data = await _request(
+      'PUT',
+      '/add-ons/${addOn.id}',
+      token: token,
+      body: {
+        'name': addOn.name,
+        'description': addOn.description,
+        'price': addOn.price,
+        'category': addOn.category,
+        'is_active': addOn.isActive,
+      },
+    );
+    return addOnFromJson(data['add_on'] as Map<String, dynamic>);
+  }
+
+  Future<SizeOption> updateSize(String token, SizeOption size) async {
+    final data = await _request(
+      'PUT',
+      '/sizes/${size.id}',
+      token: token,
+      body: {
+        'name': size.name,
+        'display_name': size.displayName,
+        'price_adjustment': size.adjustment,
+        'is_active': size.isActive,
+      },
+    );
+    return sizeFromJson(data['size'] as Map<String, dynamic>);
+  }
+}
+
 class AppState extends ChangeNotifier {
-  AppState.seeded()
+  AppState.seeded({this.api = const ApiClient()})
     : users = [
         const AppUser(
+          id: 1,
           name: 'Administrator',
           email: 'admin@milktea.test',
           password: 'password123',
@@ -319,6 +640,7 @@ class AppState extends ChangeNotifier {
           address: '123 Admin Street, Manila, Philippines',
         ),
         const AppUser(
+          id: 2,
           name: 'John Doe',
           email: 'customer@example.com',
           password: 'password',
@@ -326,15 +648,55 @@ class AppState extends ChangeNotifier {
           phone: '09987654321',
           address: '456 Customer Ave, Quezon City, Philippines',
         ),
-      ];
+      ] {
+    if (api.enabled) {
+      unawaited(refreshFromApi());
+      _syncTimer = Timer.periodic(
+        _syncInterval,
+        (_) => unawaited(refreshFromApi()),
+      );
+    }
+  }
 
+  final ApiClient api;
   final List<AppUser> users;
   AppUser? currentUser;
+  String? apiToken;
+  bool liveConnected = false;
+  String syncMessage = apiStatusText;
+  bool _syncing = false;
+  Timer? _syncTimer;
   final List<CartItem> cart = [];
   final List<Order> orders = [];
 
-  bool login(String email, String password) {
+  bool get liveSyncEnabled => api.enabled;
+
+  Future<bool> login(String email, String password) async {
     final normalized = email.trim().toLowerCase();
+
+    if (api.enabled) {
+      try {
+        final result = await api.login(normalized, password);
+        apiToken = result.token;
+        _upsertUser(result.user);
+        currentUser = result.user;
+        await refreshFromApi();
+        notifyListeners();
+        return true;
+      } on ApiException catch (error) {
+        if (error.statusCode == 401 || error.statusCode == 422) {
+          syncMessage = error.message;
+          notifyListeners();
+          return false;
+        }
+        syncMessage = 'Live server unavailable, using offline demo data.';
+      } on TimeoutException {
+        syncMessage = 'Live server timeout, using offline demo data.';
+      } catch (_) {
+        syncMessage = 'Live server unavailable, using offline demo data.';
+      }
+    }
+
     for (final user in users) {
       if (user.email.toLowerCase() == normalized && user.password == password) {
         currentUser = user;
@@ -345,24 +707,55 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
-  bool register({
+  Future<bool> register({
     required String name,
     required String email,
     required String password,
     required String phone,
-  }) {
+    String address = '',
+  }) async {
     final normalized = email.trim().toLowerCase();
+
+    if (api.enabled) {
+      try {
+        final result = await api.register(
+          name: name.trim(),
+          email: normalized,
+          password: password,
+          phone: phone.trim(),
+          address: address.trim(),
+        );
+        apiToken = result.token;
+        _upsertUser(result.user);
+        currentUser = result.user;
+        await refreshFromApi();
+        notifyListeners();
+        return true;
+      } on ApiException catch (error) {
+        if (error.statusCode == 422) {
+          syncMessage = error.message;
+          notifyListeners();
+          return false;
+        }
+        syncMessage = 'Live server unavailable, using offline demo data.';
+      } catch (_) {
+        syncMessage = 'Live server unavailable, using offline demo data.';
+      }
+    }
+
     final exists = users.any((user) => user.email.toLowerCase() == normalized);
     if (exists) {
       return false;
     }
 
     final user = AppUser(
+      id: users.length + 1,
       name: name.trim(),
       email: normalized,
       password: password,
       role: UserRole.customer,
       phone: phone.trim(),
+      address: address.trim(),
     );
     users.add(user);
     currentUser = user;
@@ -371,34 +764,90 @@ class AppState extends ChangeNotifier {
   }
 
   void logout() {
+    apiToken = null;
     currentUser = null;
     cart.clear();
+    orders.clear();
     notifyListeners();
   }
 
-  void updateCurrentUser({
+  Future<void> refreshFromApi() async {
+    if (!api.enabled || _syncing) {
+      return;
+    }
+
+    _syncing = true;
+    try {
+      final catalog = await api.fetchCatalog();
+      products
+        ..clear()
+        ..addAll(catalog.products);
+      sizes
+        ..clear()
+        ..addAll(catalog.sizes);
+      addOns
+        ..clear()
+        ..addAll(catalog.addOns);
+
+      final token = apiToken;
+      final user = currentUser;
+      if (token != null && user != null) {
+        final freshUser = await api.fetchMe(token, user.password);
+        _upsertUser(freshUser);
+        currentUser = freshUser;
+        final freshOrders = await api.fetchOrders(token);
+        orders
+          ..clear()
+          ..addAll(freshOrders);
+      }
+
+      liveConnected = true;
+      syncMessage = 'Live sync active. Refreshes every 20 seconds.';
+    } catch (error) {
+      liveConnected = false;
+      syncMessage = api.enabled
+          ? 'Offline mode. Live sync will retry automatically.'
+          : apiStatusText;
+    } finally {
+      _syncing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateCurrentUser({
     required String name,
     required String phone,
     required String address,
     String? password,
-  }) {
+  }) async {
     final user = currentUser;
     if (user == null) {
       return;
     }
 
-    final updated = user.copyWith(
-      name: name.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      password: password == null || password.trim().isEmpty
-          ? user.password
-          : password,
-    );
-    final index = users.indexWhere((item) => item.email == user.email);
-    if (index != -1) {
-      users[index] = updated;
+    AppUser updated;
+    final token = apiToken;
+    if (api.enabled && token != null) {
+      updated = await api.updateProfile(
+        token: token,
+        currentPassword: user.password,
+        name: name.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        password: password,
+      );
+    } else {
+      updated = user.copyWith(
+        name: name.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        password: password == null || password.trim().isEmpty
+            ? user.password
+            : password,
+      );
     }
+
+    _upsertUser(updated);
     currentUser = updated;
     notifyListeners();
   }
@@ -429,16 +878,35 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Order placeOrder({
+  Future<Order> placeOrder({
     required String customerName,
     required String contactNumber,
     required String address,
     required String paymentMethod,
     required String pickupMethod,
     required String notes,
-  }) {
+  }) async {
+    final token = apiToken;
+    if (api.enabled && token != null) {
+      final order = await api.placeOrder(
+        token,
+        List<CartItem>.from(cart),
+        customerName: customerName,
+        contactNumber: contactNumber,
+        address: address,
+        paymentMethod: paymentMethod,
+        pickupMethod: pickupMethod,
+        notes: notes,
+      );
+      orders.insert(0, order);
+      cart.clear();
+      notifyListeners();
+      return order;
+    }
+
     final now = DateTime.now();
     final order = Order(
+      id: orders.length + 1,
       number:
           'MT-${now.year}${two(now.month)}${two(now.day)}-${orders.length + 1}F',
       userEmail: currentUser!.email,
@@ -459,21 +927,37 @@ class AppState extends ChangeNotifier {
     return order;
   }
 
-  void updateOrderStatus(String orderNumber, String status) {
+  Future<void> updateOrderStatus(String orderNumber, String status) async {
     final index = orders.indexWhere((order) => order.number == orderNumber);
     if (index == -1) {
       return;
     }
-    orders[index] = orders[index].copyWith(status: status);
+
+    final token = apiToken;
+    if (api.enabled && token != null && orders[index].id > 0) {
+      orders[index] = await api.updateOrderStatus(token, orders[index], status);
+    } else {
+      orders[index] = orders[index].copyWith(status: status);
+    }
     notifyListeners();
   }
 
-  void updatePaymentStatus(String orderNumber, String status) {
+  Future<void> updatePaymentStatus(String orderNumber, String status) async {
     final index = orders.indexWhere((order) => order.number == orderNumber);
     if (index == -1) {
       return;
     }
-    orders[index] = orders[index].copyWith(paymentStatus: status);
+
+    final token = apiToken;
+    if (api.enabled && token != null && orders[index].id > 0) {
+      orders[index] = await api.updatePaymentStatus(
+        token,
+        orders[index],
+        status,
+      );
+    } else {
+      orders[index] = orders[index].copyWith(paymentStatus: status);
+    }
     notifyListeners();
   }
 
@@ -489,7 +973,12 @@ class AppState extends ChangeNotifier {
     return orders.where((order) => order.userEmail == user.email).toList();
   }
 
-  void updateProduct(Product updatedProduct) {
+  Future<void> updateProduct(Product updatedProduct) async {
+    final token = apiToken;
+    if (api.enabled && token != null) {
+      updatedProduct = await api.updateProduct(token, updatedProduct);
+    }
+
     final index = products.indexWhere(
       (product) => product.id == updatedProduct.id,
     );
@@ -500,8 +989,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateAddOn(AddOnOption currentAddOn, AddOnOption updatedAddOn) {
-    final index = addOns.indexOf(currentAddOn);
+  Future<void> updateAddOn(AddOnOption updatedAddOn) async {
+    final token = apiToken;
+    if (api.enabled && token != null) {
+      updatedAddOn = await api.updateAddOn(token, updatedAddOn);
+    }
+
+    final index = addOns.indexWhere((addOn) => addOn.id == updatedAddOn.id);
     if (index == -1) {
       return;
     }
@@ -509,13 +1003,33 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateSize(SizeOption currentSize, SizeOption updatedSize) {
-    final index = sizes.indexOf(currentSize);
+  Future<void> updateSize(SizeOption updatedSize) async {
+    final token = apiToken;
+    if (api.enabled && token != null) {
+      updatedSize = await api.updateSize(token, updatedSize);
+    }
+
+    final index = sizes.indexWhere((size) => size.id == updatedSize.id);
     if (index == -1) {
       return;
     }
     sizes[index] = updatedSize;
     notifyListeners();
+  }
+
+  void _upsertUser(AppUser user) {
+    final index = users.indexWhere((item) => item.email == user.email);
+    if (index == -1) {
+      users.add(user);
+    } else {
+      users[index] = user;
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
   }
 }
 
@@ -632,47 +1146,208 @@ final products = <Product>[
 ];
 
 final sizes = <SizeOption>[
-  const SizeOption(name: 'small', displayName: 'Small (12oz)', adjustment: 0),
   const SizeOption(
+    id: 1,
+    name: 'small',
+    displayName: 'Small (12oz)',
+    adjustment: 0,
+  ),
+  const SizeOption(
+    id: 2,
     name: 'medium',
     displayName: 'Medium (16oz)',
     adjustment: 10,
   ),
-  const SizeOption(name: 'large', displayName: 'Large (22oz)', adjustment: 20),
+  const SizeOption(
+    id: 3,
+    name: 'large',
+    displayName: 'Large (22oz)',
+    adjustment: 20,
+  ),
 ];
 
 final addOns = <AddOnOption>[
   const AddOnOption(
+    id: 1,
     name: 'Pearl',
     description: 'Chewy tapioca pearls',
     price: 10,
   ),
   const AddOnOption(
+    id: 2,
     name: 'Nata',
     description: 'Sweet coconut jelly',
     price: 10,
   ),
   const AddOnOption(
+    id: 3,
     name: 'Pudding',
     description: 'Creamy egg pudding',
     price: 15,
   ),
   const AddOnOption(
+    id: 4,
     name: 'Grass Jelly',
     description: 'Refreshing herbal jelly',
     price: 10,
   ),
   const AddOnOption(
+    id: 5,
     name: 'Aloe Vera',
     description: 'Healthy aloe vera pieces',
     price: 15,
   ),
   const AddOnOption(
+    id: 6,
     name: 'Red Bean',
     description: 'Sweet red beans',
     price: 15,
   ),
 ];
+
+AppUser userFromJson(Map<String, dynamic> json, String password) {
+  return AppUser(
+    id: intValue(json['id']),
+    name: json['name']?.toString() ?? '',
+    email: json['email']?.toString() ?? '',
+    password: password,
+    role: json['role']?.toString() == 'admin'
+        ? UserRole.admin
+        : UserRole.customer,
+    phone: json['phone']?.toString() ?? '',
+    address: json['address']?.toString() ?? '',
+  );
+}
+
+Product productFromJson(Map<String, dynamic> json) {
+  final id = intValue(json['id']);
+  final name = json['name']?.toString() ?? '';
+  final colors = colorsForProduct(id, name, json['category']?.toString() ?? '');
+
+  return Product(
+    id: id,
+    name: name,
+    description: json['description']?.toString() ?? '',
+    basePrice: doubleValue(json['base_price']),
+    category: json['category']?.toString() ?? 'milk_tea',
+    primary: colors.$1,
+    secondary: colors.$2,
+    imageUrl: json['image_url']?.toString() ?? '',
+    isActive: json['is_active'] != false,
+  );
+}
+
+SizeOption sizeFromJson(Map<String, dynamic> json) {
+  return SizeOption(
+    id: intValue(json['id']),
+    name: json['name']?.toString() ?? '',
+    displayName: json['display_name']?.toString() ?? '',
+    adjustment: doubleValue(json['price_adjustment']),
+    isActive: json['is_active'] != false,
+  );
+}
+
+AddOnOption addOnFromJson(Map<String, dynamic> json) {
+  return AddOnOption(
+    id: intValue(json['id']),
+    name: json['name']?.toString() ?? '',
+    description: json['description']?.toString() ?? '',
+    price: doubleValue(json['price']),
+    category: json['category']?.toString() ?? 'topping',
+    imageUrl: json['image_url']?.toString() ?? '',
+    isActive: json['is_active'] != false,
+  );
+}
+
+Order orderFromJson(Map<String, dynamic> json) {
+  return Order(
+    id: intValue(json['id']),
+    number: json['number']?.toString() ?? '',
+    userEmail: json['user_email']?.toString() ?? '',
+    customerName: json['customer_name']?.toString() ?? '',
+    contactNumber: json['contact_number']?.toString() ?? '',
+    address: json['address']?.toString() ?? '',
+    paymentMethod: json['payment_method']?.toString() ?? 'cash',
+    pickupMethod: json['pickup_method']?.toString() ?? 'in_store',
+    status: json['status']?.toString() ?? 'pending',
+    paymentStatus: json['payment_status']?.toString() ?? 'pending',
+    items: (json['items'] as List<dynamic>? ?? [])
+        .map((item) => cartItemFromJson(item as Map<String, dynamic>))
+        .toList(),
+    createdAt:
+        DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+        DateTime.now(),
+    notes: json['notes']?.toString() ?? '',
+  );
+}
+
+CartItem cartItemFromJson(Map<String, dynamic> json) {
+  return CartItem(
+    product: productFromJson(json['product'] as Map<String, dynamic>),
+    size: sizeFromJson(json['size'] as Map<String, dynamic>),
+    sugarLevel: json['sugar_level']?.toString() ?? '50%',
+    iceLevel: json['ice_level']?.toString() ?? 'normal_ice',
+    addOns: (json['add_ons'] as List<dynamic>? ?? [])
+        .map((item) => addOnFromJson(item as Map<String, dynamic>))
+        .toList(),
+    quantity: intValue(json['quantity'], fallback: 1),
+    notes: json['special_instructions']?.toString() ?? '',
+  );
+}
+
+Map<String, dynamic> cartItemToJson(CartItem item) {
+  return {
+    'product_id': item.product.id,
+    'size_id': item.size.id,
+    'add_on_ids': item.addOns.map((addOn) => addOn.id).toList(),
+    'sugar_level': item.sugarLevel,
+    'ice_level': item.iceLevel,
+    'quantity': item.quantity,
+    'special_instructions': item.notes,
+  };
+}
+
+(Color, Color) colorsForProduct(int id, String name, String category) {
+  final local = products.where((product) => product.id == id);
+  if (local.isNotEmpty) {
+    return (local.first.primary, local.first.secondary);
+  }
+
+  final normalized = name.toLowerCase();
+  if (normalized.contains('matcha')) {
+    return (const Color(0xFFC8E6A0), const Color(0xFF5F9E3E));
+  }
+  if (normalized.contains('taro')) {
+    return (const Color(0xFFD8B4E2), const Color(0xFF8A4FA3));
+  }
+  if (normalized.contains('strawberry')) {
+    return (const Color(0xFFFFB4C8), const Color(0xFFE34A6F));
+  }
+  if (normalized.contains('mango')) {
+    return (const Color(0xFFFFD56B), const Color(0xFFE88B22));
+  }
+  if (category == 'coffee') {
+    return (const Color(0xFFCFA17A), const Color(0xFF6E3F22));
+  }
+  if (category == 'fruit_tea') {
+    return (const Color(0xFFFFC978), const Color(0xFFE8792A));
+  }
+  return (const Color(0xFFD0A16F), const Color(0xFF7B431E));
+}
+
+int intValue(Object? value, {int fallback = 0}) {
+  if (value is int) {
+    return value;
+  }
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
+
+double doubleValue(Object? value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
 
 const sugarLevels = ['0%', '25%', '50%', '75%', '100%'];
 const iceLevels = ['no_ice', 'less_ice', 'normal_ice'];
@@ -698,6 +1373,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final email = TextEditingController(text: 'customer@example.com');
   final password = TextEditingController(text: 'password');
   bool showPassword = false;
+  bool loading = false;
 
   @override
   void dispose() {
@@ -706,11 +1382,16 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void submit() {
+  Future<void> submit() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
-    final ok = AppScope.of(context).login(email.text, password.text);
+    setState(() => loading = true);
+    final ok = await AppScope.of(context).login(email.text, password.text);
+    if (!mounted) {
+      return;
+    }
+    setState(() => loading = false);
     if (!ok) {
       showSnack(context, 'Invalid email or password.');
     }
@@ -755,9 +1436,9 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: submit,
+              onPressed: loading ? null : submit,
               icon: const Icon(Icons.login),
-              label: const Text('Login'),
+              label: Text(loading ? 'Logging in...' : 'Login'),
             ),
             const SizedBox(height: 14),
             OutlinedButton.icon(
@@ -798,6 +1479,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final confirmPassword = TextEditingController();
   bool showPassword = false;
   bool showConfirmPassword = false;
+  bool loading = false;
 
   @override
   void dispose() {
@@ -809,16 +1491,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void submit() {
+  Future<void> submit() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
-    final ok = AppScope.of(context).register(
+    setState(() => loading = true);
+    final ok = await AppScope.of(context).register(
       name: name.text,
       email: email.text,
       password: password.text,
       phone: phone.text,
     );
+    if (!mounted) {
+      return;
+    }
+    setState(() => loading = false);
     if (!ok) {
       showSnack(context, 'Email already exists.');
       return;
@@ -920,9 +1607,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: submit,
+              onPressed: loading ? null : submit,
               icon: const Icon(Icons.person_add_alt_1),
-              label: const Text('Register'),
+              label: Text(loading ? 'Creating...' : 'Register'),
             ),
           ],
         ),
@@ -985,7 +1672,9 @@ class AuthScaffold extends StatelessWidget {
 }
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({this.embedded = false, super.key});
+
+  final bool embedded;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -1001,6 +1690,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool showPassword = false;
   bool showConfirmPassword = false;
   bool initialized = false;
+  bool loading = false;
 
   @override
   void didChangeDependencies() {
@@ -1025,29 +1715,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  void submit() {
+  Future<void> submit() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
 
-    AppScope.of(context).updateCurrentUser(
-      name: name.text,
-      phone: phone.text,
-      address: address.text,
-      password: password.text.trim().isEmpty ? null : password.text,
-    );
-    Navigator.of(context).pop();
+    setState(() => loading = true);
+    try {
+      await AppScope.of(context).updateCurrentUser(
+        name: name.text,
+        phone: phone.text,
+        address: address.text,
+        password: password.text.trim().isEmpty ? null : password.text,
+      );
+    } on ApiException catch (error) {
+      if (mounted) {
+        showSnack(context, error.message);
+      }
+      return;
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+    if (!widget.embedded && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
     showSnack(context, 'Profile updated.');
   }
 
   @override
   Widget build(BuildContext context) {
     final user = AppScope.of(context).currentUser!;
-    return Scaffold(
-      appBar: const MilkTeaAppBar(title: 'Profile'),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+    final content = ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (widget.embedded) ...[
+          Text(
+            'Profile',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 12),
+        ],
           SectionCard(
             title: 'Account Information',
             icon: Icons.person_outline,
@@ -1144,9 +1859,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: submit,
+                      onPressed: loading ? null : submit,
                       icon: const Icon(Icons.save_outlined),
-                      label: const Text('Save Profile'),
+                      label: Text(loading ? 'Saving...' : 'Save Profile'),
                     ),
                   ),
                 ],
@@ -1154,7 +1869,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
-      ),
+    );
+
+    if (widget.embedded) {
+      return content;
+    }
+
+    return Scaffold(
+      appBar: const MilkTeaAppBar(title: 'Profile'),
+      body: content,
     );
   }
 }
@@ -1176,6 +1899,7 @@ class _CustomerHomeState extends State<CustomerHome> {
       const MenuScreen(),
       const CartScreen(),
       const CustomerOrdersScreen(),
+      const ProfileScreen(embedded: true),
     ];
 
     return Scaffold(
@@ -1211,6 +1935,10 @@ class _CustomerHomeState extends State<CustomerHome> {
             icon: Icon(Icons.receipt_long_outlined),
             label: 'Orders',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            label: 'Profile',
+          ),
         ],
       ),
     );
@@ -1243,6 +1971,7 @@ class _AdminHomeState extends State<AdminHome> {
           AdminDashboardScreen(),
           AdminOrdersScreen(),
           AdminCatalogScreen(),
+          ProfileScreen(embedded: true),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -1260,6 +1989,10 @@ class _AdminHomeState extends State<AdminHome> {
           NavigationDestination(
             icon: Icon(Icons.inventory_2_outlined),
             label: 'Catalog',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            label: 'Profile',
           ),
         ],
       ),
@@ -1290,12 +2023,17 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final state = AppScope.of(context);
     final items = filteredProducts;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
       children: [
         const MenuHero(),
         const SizedBox(height: 16),
+        if (state.liveSyncEnabled) ...[
+          InfoPill(text: state.syncMessage),
+          const SizedBox(height: 12),
+        ],
         CategoryFilter(
           selected: category,
           onChanged: (value) => setState(() => category = value),
@@ -1747,6 +2485,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String paymentMethod = 'cash';
   String pickupMethod = 'in_store';
   bool initialized = false;
+  bool loading = false;
 
   @override
   void didChangeDependencies() {
@@ -1770,19 +2509,33 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     super.dispose();
   }
 
-  void submit() {
+  Future<void> submit() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
     final state = AppScope.of(context);
-    final order = state.placeOrder(
-      customerName: customerName.text,
-      contactNumber: contactNumber.text,
-      address: address.text,
-      paymentMethod: paymentMethod,
-      pickupMethod: pickupMethod,
-      notes: notes.text,
-    );
+    setState(() => loading = true);
+    late final Order order;
+    try {
+      order = await state.placeOrder(
+        customerName: customerName.text,
+        contactNumber: contactNumber.text,
+        address: address.text,
+        paymentMethod: paymentMethod,
+        pickupMethod: pickupMethod,
+        notes: notes.text,
+      );
+    } on ApiException catch (error) {
+      if (mounted) {
+        showSnack(context, error.message);
+        setState(() => loading = false);
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() => loading = false);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => CustomerOrderDetailsScreen(orderNumber: order.number),
@@ -1876,9 +2629,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
           const SizedBox(height: 14),
           FilledButton.icon(
-            onPressed: submit,
+            onPressed: loading ? null : submit,
             icon: const Icon(Icons.check_circle_outline),
-            label: const Text('Place Order'),
+            label: Text(loading ? 'Placing Order...' : 'Place Order'),
           ),
         ],
       ),
@@ -2192,7 +2945,7 @@ class OrderDetailsBody extends StatelessWidget {
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      state.updateOrderStatus(order.number, value);
+                      unawaited(state.updateOrderStatus(order.number, value));
                     }
                   },
                 ),
@@ -2215,7 +2968,9 @@ class OrderDetailsBody extends StatelessWidget {
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      state.updatePaymentStatus(order.number, value);
+                      unawaited(
+                        state.updatePaymentStatus(order.number, value),
+                      );
                     }
                   },
                 ),
@@ -2420,6 +3175,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
   late final TextEditingController description;
   late final TextEditingController basePrice;
   late String category;
+  bool loading = false;
 
   @override
   void initState() {
@@ -2441,19 +3197,35 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
     super.dispose();
   }
 
-  void submit() {
+  Future<void> submit() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
 
-    AppScope.of(context).updateProduct(
-      product.copyWith(
-        name: name.text.trim(),
-        description: description.text.trim(),
-        basePrice: parseAmount(basePrice.text),
-        category: category,
-      ),
-    );
+    setState(() => loading = true);
+    try {
+      await AppScope.of(context).updateProduct(
+        product.copyWith(
+          name: name.text.trim(),
+          description: description.text.trim(),
+          basePrice: parseAmount(basePrice.text),
+          category: category,
+        ),
+      );
+    } on ApiException catch (error) {
+      if (mounted) {
+        showSnack(context, error.message);
+      }
+      return;
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
     Navigator.of(context).pop();
     showSnack(context, 'Product updated.');
   }
@@ -2509,7 +3281,7 @@ class _ProductEditScreenState extends State<ProductEditScreen> {
                     setState(() => category = value ?? 'milk_tea'),
               ),
               const SizedBox(height: 16),
-              SaveButton(onPressed: submit),
+              SaveButton(onPressed: loading ? null : submit, loading: loading),
             ],
           ),
         ),
@@ -2532,6 +3304,7 @@ class _AddOnEditScreenState extends State<AddOnEditScreen> {
   late final TextEditingController name;
   late final TextEditingController description;
   late final TextEditingController price;
+  bool loading = false;
 
   @override
   void initState() {
@@ -2549,19 +3322,34 @@ class _AddOnEditScreenState extends State<AddOnEditScreen> {
     super.dispose();
   }
 
-  void submit() {
+  Future<void> submit() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
 
-    AppScope.of(context).updateAddOn(
-      widget.addOn,
-      widget.addOn.copyWith(
-        name: name.text.trim(),
-        description: description.text.trim(),
-        price: parseAmount(price.text),
-      ),
-    );
+    setState(() => loading = true);
+    try {
+      await AppScope.of(context).updateAddOn(
+        widget.addOn.copyWith(
+          name: name.text.trim(),
+          description: description.text.trim(),
+          price: parseAmount(price.text),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (mounted) {
+        showSnack(context, error.message);
+      }
+      return;
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
     Navigator.of(context).pop();
     showSnack(context, 'Add-on updated.');
   }
@@ -2600,7 +3388,7 @@ class _AddOnEditScreenState extends State<AddOnEditScreen> {
                 validator: amountValidator,
               ),
               const SizedBox(height: 16),
-              SaveButton(onPressed: submit),
+              SaveButton(onPressed: loading ? null : submit, loading: loading),
             ],
           ),
         ),
@@ -2622,6 +3410,7 @@ class _SizeEditScreenState extends State<SizeEditScreen> {
   final formKey = GlobalKey<FormState>();
   late final TextEditingController displayName;
   late final TextEditingController adjustment;
+  bool loading = false;
 
   @override
   void initState() {
@@ -2639,18 +3428,33 @@ class _SizeEditScreenState extends State<SizeEditScreen> {
     super.dispose();
   }
 
-  void submit() {
+  Future<void> submit() async {
     if (!formKey.currentState!.validate()) {
       return;
     }
 
-    AppScope.of(context).updateSize(
-      widget.size,
-      widget.size.copyWith(
-        displayName: displayName.text.trim(),
-        adjustment: parseAmount(adjustment.text),
-      ),
-    );
+    setState(() => loading = true);
+    try {
+      await AppScope.of(context).updateSize(
+        widget.size.copyWith(
+          displayName: displayName.text.trim(),
+          adjustment: parseAmount(adjustment.text),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (mounted) {
+        showSnack(context, error.message);
+      }
+      return;
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
     Navigator.of(context).pop();
     showSnack(context, 'Size updated.');
   }
@@ -2689,7 +3493,7 @@ class _SizeEditScreenState extends State<SizeEditScreen> {
                 validator: amountValidator,
               ),
               const SizedBox(height: 16),
-              SaveButton(onPressed: submit),
+              SaveButton(onPressed: loading ? null : submit, loading: loading),
             ],
           ),
         ),
@@ -2720,9 +3524,10 @@ class EditFormShell extends StatelessWidget {
 }
 
 class SaveButton extends StatelessWidget {
-  const SaveButton({required this.onPressed, super.key});
+  const SaveButton({required this.onPressed, this.loading = false, super.key});
 
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
@@ -2731,7 +3536,7 @@ class SaveButton extends StatelessWidget {
       child: FilledButton.icon(
         onPressed: onPressed,
         icon: const Icon(Icons.save_outlined),
-        label: const Text('Save Changes'),
+        label: Text(loading ? 'Saving...' : 'Save Changes'),
       ),
     );
   }

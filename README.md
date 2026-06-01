@@ -26,6 +26,7 @@ A Laravel 11 web-based ordering system for a milk tea shop. The project includes
 - MySQL database support through Laravel migrations
 - Eloquent ORM relationships
 - Role-based authentication for admin and customer users
+- Mobile API endpoints for Flutter live sync
 - CSRF protection and server-side form validation
 - Default SVG product/add-on images for items without uploads
 - Basic PHPUnit health check
@@ -121,6 +122,7 @@ php artisan test
 
 ```text
 app/Http/Controllers/Admin      Admin dashboard, CRUD, and order management
+app/Http/Controllers/Api        Mobile API for Flutter live sync
 app/Http/Controllers/Customer   Menu, cart, checkout, and customer orders
 app/Models                      Eloquent models and relationships
 database/migrations             Database table definitions
@@ -128,6 +130,7 @@ database/seeders                Default users, products, sizes, and add-ons
 public/images                   Default product and add-on images
 resources/views                 Blade templates
 routes/web.php                  Web routes
+routes/api.php                  Flutter/mobile API routes
 ```
 
 ## Deployment Notes

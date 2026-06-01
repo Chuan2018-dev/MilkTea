@@ -25,6 +25,8 @@ CREATE TABLE `users` (
   `phone` varchar(255) DEFAULT NULL,
   `address` text,
   `remember_token` varchar(100) DEFAULT NULL,
+  `api_token_hash` varchar(64) DEFAULT NULL,
+  `api_token_created_at` timestamp NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),

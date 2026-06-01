@@ -39,16 +39,11 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Login'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Administrator'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
 
     expect(find.text('Profile'), findsWidgets);
     expect(find.text('Save Profile'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Catalog'));
     await tester.pumpAndSettle();

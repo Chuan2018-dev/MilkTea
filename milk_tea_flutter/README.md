@@ -14,6 +14,7 @@ Flutter mobile/web version of the Milk Tea Shop ordering system.
 - Admin dashboard with recent orders
 - Admin order status and payment status updates
 - Admin catalog views and edit forms for products, add-ons, and sizes
+- Optional live sync with the Laravel API every 20 seconds
 
 ## Demo Accounts
 
@@ -26,6 +27,12 @@ Flutter mobile/web version of the Milk Tea Shop ordering system.
 flutter run
 ```
 
+Live API mode:
+
+```powershell
+flutter run --dart-define=MILK_TEA_LIVE_API=true --dart-define=MILK_TEA_API_URL=https://milkteashop.infinityfreeapp.com/api/mobile
+```
+
 ## Notes
 
-This version currently runs with local in-app demo data so it can be tested without changing the Laravel database. The next step for production is to add Laravel API endpoints and connect the Flutter app to the live backend.
+By default this version runs with local in-app demo data so tests are fast and offline-safe. Release APK builds enable live API sync through GitHub Actions.
